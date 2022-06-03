@@ -129,7 +129,7 @@ class Cluster extends EventEmitter {
      * before resolving. (-1 or Infinity for no wait)
      * @returns {Promise<ChildProcess>}
      */
-    async spawn(spawnTimeout = 30000) {
+    async spawn(spawnTimeout = 120000) {
         if (this.thread) throw new Error('CLUSTERING_PROCESS_EXISTS', this.id);
         this.thread = new Thread(path.resolve(this.manager.file), {
             ...this.manager.clusterOptions,
