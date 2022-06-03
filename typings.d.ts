@@ -1,4 +1,4 @@
-declare module 'discord-hybrid-sharding' {
+declare module 'discord-hybrid-sharding-vk' {
     import { EventEmitter } from 'events';
     import { ChildProcess } from 'child_process';
     import { Client as DJsClient } from 'discord.js';
