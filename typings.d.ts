@@ -1,7 +1,7 @@
 declare module 'discord-hybrid-sharding-vk' {
     import { EventEmitter } from 'events';
     import { ChildProcess } from 'child_process';
-    import { Client as DJsClient } from 'discord.js';
+    import { Client as DJsClient, Collection } from 'discord.js';
 
     export class Cluster extends EventEmitter {
         constructor(manager: Manager, id: number);
@@ -26,15 +26,14 @@ declare module 'discord-hybrid-sharding-vk' {
         public eval(script: string): Promise<unknown>;
         public eval<T>(fn: (client: Client) => T): Promise<T>;
         public eval<T, P>(fn: (client: Client, context: Serialized<P>) => T, context: P): Promise<T>;
-        public fetchClientValue(prop: string): Promise<any>;
+        public fetchClientValue(prop: string, cluster: number): Promise<any>;
         public kill(): void;
         public respawn(options?: { delay?: number; timeout?: number }): Promise<ChildProcess>;
         public send(message: any): Promise<Cluster>;
-        public request(message: BaseMessage): Promise<BaseMessage>;
+        public request(message: object): Promise<BaseMessage>;
         public spawn(timeout?: number): Promise<ChildProcess>;
 
-        private _checkIfClusterAlive(): Promise<any[]>;
-        private _cleanupHeartbeat(): Promise<any[]>;
+        public triggerMaintenance(reason: string): any;
 
         public on(event: 'spawn' | 'death', listener: (child: ChildProcess) => void): this;
         public on(event: 'disconnect' | 'ready' | 'reconnecting', listener: () => void): this;
@@ -50,66 +49,62 @@ declare module 'discord-hybrid-sharding-vk' {
     }
 
     export class Client extends EventEmitter {
-        constructor(client: client);
+        constructor(client: client|any);
         private _handleMessage(message: any): void;
         private _respond(type: string, message: any): void;
-        private _nonce: Map<string, Promise<any>>;
 
         public client: client;
         public readonly count: number;
         public readonly id: number;
-        public readonly ids: number[];
-        public readonly keepAliveInterval: number;
+        public readonly ids: Collection<number,any>;
         public mode: ClusterManagerMode;
+        public maintenance: string;
         public static getInfo: processData;
-        public getInfo: processData;
+        get getInfo(): processData;
         public parentPort: any | null;
         public evalOnManager(script: string): Promise<any[]>;
-        public evalOnManager(script: string, options: { timeout?: number }): Promise<any>;
-        public evalOnManager<T>(fn: (manager: Manager) => T, options: { timeout?: number }): Promise<T>;
-        public evalOnManager<T>(fn: (manager: Manager) => T, options: { timeout?: number }): Promise<any[]>;
+        public evalOnManager(script: string, options?: evalOptions): Promise<any>;
+        public evalOnManager<T>(fn: (manager: Manager) => T, options?: evalOptions): Promise<T>;
+        public evalOnManager<T>(fn: (manager: Manager) => T, options?: evalOptions): Promise<any[]>;
 
         public evalOnCluster(
             script: string,
-            options: { cluster?: number; shard?: number; guildId?: string; timeout?: number },
+            options?: evalOptions,
         ): Promise<any[]>;
         public evalOnCluster<T>(
             fn: (client: DJsClient) => T,
-            options: { cluster?: number; shard?: number; guildId?: string; timeout?: number },
+            options?: evalOptions,
         ): Promise<T>;
         public evalOnCluster<T>(
             fn: (client: DJsClient) => T,
-            options: { cluster?: number; shard?: number; guildId?: string; timeout?: number },
+            options?: evalOptions,
         ): Promise<any[]>;
         public broadcastEval(script: string): Promise<any[]>;
-        public broadcastEval(script: string, options: { cluster?: number; timeout?: number }): Promise<any>;
+        public broadcastEval(script: string, options?: evalOptions): Promise<any>;
         public broadcastEval<T>(fn: (client: DJsClient) => Awaitable<T>): Promise<Serialized<T>[]>;
         public broadcastEval<T>(
             fn: (client: DJsClient) => Awaitable<T>,
-            options: { cluster?: number; timeout?: number },
+            options?: evalOptions,
         ): Promise<Serialized<T>>;
         public broadcastEval<T, P>(
             fn: (client: DJsClient, context: Serialized<P>) => Awaitable<T>,
-            options: { context: P },
+            options?: evalOptions,
         ): Promise<Serialized<T>[]>;
         public broadcastEval<T, P>(
             fn: (client: DJsClient, context: Serialized<P>) => Awaitable<T>,
-            options: { context: P; cluster?: number; timeout?: number },
+            options?: evalOptions,
         ): Promise<Serialized<T>>;
         public fetchClientValues(prop: string): Promise<any[]>;
         public fetchClientValues(prop: string, cluster: number): Promise<any>;
         public send(message: any): Promise<void>;
         public request(message: Object): Promise<BaseMessage>;
         public respawnAll(options?: ClusterRespawnOptions): Promise<void>;
-        private _heartbeatAckMessage(): Promise<any[]>;
-        private _checkIfAckReceived(): Promise<any[]>;
-        private _checkIfClusterAlive(): Promise<any[]>;
-        private _cleanupHeartbeat(): Promise<any[]>;
 
         public triggerReady(): Promise<void>;
+        public triggerMaintenance(reason: string, all?: Boolean): any;
         public spawnNextCluster(): Promise<void>;
     }
-    
+
     export interface ManagerOptions {
         totalShards?: number | 'auto';
         totalClusters?: number | 'auto';
@@ -123,6 +118,11 @@ declare module 'discord-hybrid-sharding-vk' {
         keepAlive?: keepAliveOptions;
         queue?: {
             auto?: boolean;
+        };
+        restarts?: {
+            max?: number;
+            interval?: number;
+            current?: number;
         };
         clusterData?: Object;
         clusterOptions?: Object;
@@ -174,6 +174,8 @@ declare module 'discord-hybrid-sharding-vk' {
         private evalOnCluster(script: string, options: Object): Promise<any[]>;
         public respawnAll(options?: ClusterRespawnOptions): Promise<Map<number, Cluster>>;
         public spawn(options?: ClusterSpawnOptions): Promise<Map<number, Cluster>>;
+        public triggerMaintenance(reason: string): any;
+        public extend(...plugins: object[]): void;
 
         public on(event: 'clusterCreate', listener: (cluster: Cluster) => void): this;
         public on(event: 'debug', listener: (message: string) => void): this;
@@ -197,17 +199,16 @@ declare module 'discord-hybrid-sharding-vk' {
         public reply(message: Object): Promise<Object>;
     }
 
-    export class data {
-        static SHARD_LIST: number[];
-        static TOTAL_SHARDS: number;
-        static CLUSTER_COUNT: number;
-        static CLUSTER: number;
-        static CLUSTER_MANAGER_MODE: ClusterManagerMode;
-        static KEEP_ALIVE_INTERVAL: number;
+    export interface data {
+        SHARD_LIST: number[];
+        TOTAL_SHARDS: number;
+        LAST_SHARD_ID: number;
+        FIRST_SHARD_ID: number;
+        CLUSTER_COUNT: number;
+        CLUSTER: number;
+        CLUSTER_MANAGER_MODE: ClusterManagerMode; 
     }
 
-    type ClusterManagerMode = 'process' | 'worker';
-    type client = DJsClient;
     export type processData = {
         SHARD_LIST: number[];
         TOTAL_SHARDS: number;
@@ -216,13 +217,18 @@ declare module 'discord-hybrid-sharding-vk' {
         CLUSTER_COUNT: number;
         CLUSTER: number;
         CLUSTER_MANAGER_MODE: ClusterManagerMode;
-        KEEP_ALIVE_INTERVAL: number;
-    };
+    }
+
+    type ClusterManagerMode = 'process' | 'worker';
+    type client = DJsClient;
+
+    
 
     export type keepAliveOptions = {
-        interval: number | 10000;
-        maxClusterRestarts: number | 3;
-        maxMissedHeartbeats: number | 5;
+        /** Default interval is 20000 */
+        interval?: number;
+        /** Default maxMissedHeartbeats is 5 */
+        maxMissedHeartbeats?: number;
     };
 
     export interface ClusterSpawnOptions {
@@ -237,6 +243,25 @@ declare module 'discord-hybrid-sharding-vk' {
         timeout?: number;
     }
 
+    export interface ReClusterOptions {
+        delay?: number;
+        timeout?: number;
+        totalShards?: number | 'auto';
+        totalClusters?: number;
+        shardsPerClusters?: number;
+        shardList?: number[];
+        shardClusterList?: number[][];
+        restartMode?: 'gracefulSwitch' | 'rolling';
+    }
+
+    export interface evalOptions {
+        cluster?: number | number[],
+        shard?: number,
+        guildId?: string,
+        context?: Array<any> | object,
+        timeout?: number;
+    }
+
     export class Queue {
         options: {
             auto?: boolean;
@@ -248,6 +273,19 @@ declare module 'discord-hybrid-sharding-vk' {
         public resume(): Queue;
         public add(item: any): Queue;
         public next(): Promise<void>;
+    }
+
+    export class HeartBeatManager {
+        constructor(options?: keepAliveOptions);
+        public start(): Promise<void>;
+        public build(): Promise<typeof this.start>;
+    }
+
+    export class ReClusterManager {
+        constructor(options?: object);
+        private _start(): Promise<{success: boolean}>;
+        public start(options: ReClusterOptions): typeof this._start;
+        public build(manager: Manager): Manager;
     }
 
     export type Awaitable<T> = T | PromiseLike<T>;
